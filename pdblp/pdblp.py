@@ -1,3 +1,5 @@
+### dowloaded from https://github.com/matthewgilbert/pdblp/tree/master/pdblp
+
 import blpapi
 import logging
 import datetime
@@ -21,7 +23,6 @@ class BCon(object):
     def __init__(self, host='localhost', port=8194, debug=False):
         """
         Create an object which manages connection to the Bloomberg API session
-
         Parameters
         ----------
         host: str
@@ -118,7 +119,6 @@ class BCon(object):
         of tickers and fields if multiple fields given an Index otherwise.
         If single field is given DataFrame is ordered same as tickers,
         otherwise MultiIndex is sorted
-
         Parameters
         ----------
         tickers: {list, string}
@@ -145,17 +145,23 @@ class BCon(object):
 
         data = self._bdh_list(tickers, flds, start_date, end_date,
                               elms, ovrds)
-
+                              
+        
         df = DataFrame(data)
-        df.columns = ["date", "ticker", "field", "value"]
-        df.loc[:, "date"] = pd.to_datetime(df.loc[:, "date"])
-        if not longdata:
-            cols = ['ticker', 'field']
-            df = df.set_index(['date'] + cols).unstack(cols)
-            df.columns = df.columns.droplevel(0)
+        try:
+            df.columns = ["date", "ticker", "field", "value"]
+            df.loc[:, "date"] = pd.to_datetime(df.loc[:, "date"])
+            if not longdata:
+                cols = ['ticker', 'field']
+                df = df.set_index(['date'] + cols).unstack(cols)
+                df.columns = df.columns.droplevel(0)
+        except Exception:
+            df = DataFrame()
+                
 
         return df
-
+        
+        
     def _bdh_list(self, tickers, flds, start_date, end_date, elms,
                   ovrds):
 
@@ -180,6 +186,7 @@ class BCon(object):
             # We provide timeout to give the chance for Ctrl+C handling:
             ev = self.session.nextEvent(500)
             for msg in ev:
+                print msg
                 logging.debug("Message Received:\n %s" % msg)
                 if msg.getElement('securityData').hasElement('securityError') or (msg.getElement('securityData').getElement("fieldExceptions").numValues() > 0):  # NOQA
                     raise Exception(msg)
@@ -199,11 +206,10 @@ class BCon(object):
 
         return data
 
-    def ref(self, tickers, flds, ovrds=[]):
+    def ref(self, tickers, flds=[], ovrds=[], rtype="ReferenceDataRequest"):
         """
         Make a reference data request, get tickers and fields, return long
         pandas Dataframe with columns [ticker, field, value]
-
         Parameters
         ----------
         tickers: {list, string}
@@ -213,22 +219,22 @@ class BCon(object):
         ovrds: list of tuples
             List of tuples where each tuple corresponds to the override
             field and value
+        rtype: string
+            "ReferenceDataRequest" for security information
+            "PortfolioDataRequest" for portfolio information
         """
 
-        data = self._ref(tickers, flds, ovrds)
-
-        data = DataFrame(data)
-        data.columns = ["ticker", "field", "value"]
-        return data
-
-    def _ref(self, tickers, flds, ovrds):
+        return DataFrame(data=self._ref(tickers, flds, ovrds, rtype)) #, columns=["ticker", "field", "value"])
+        
+        
+    def _ref(self, tickers, flds, ovrds, rtype):
 
         if type(tickers) is not list:
             tickers = [tickers]
         if type(flds) is not list:
             flds = [flds]
 
-        request = self._create_req("ReferenceDataRequest", tickers, flds,
+        request = self._create_req(rtype, tickers, flds,
                                    ovrds, [])
 
         logging.debug("Sending Request:\n %s" % request)
@@ -242,6 +248,7 @@ class BCon(object):
             for msg in ev:
                 logging.debug("Message Received:\n %s" % msg)
                 fldData = msg.getElement('securityData')
+                print msg
                 for i in range(fldData.numValues()):
                     ticker = (fldData.getValue(i).getElement("security").getValue())  # NOQA
                     reqFldsData = (fldData.getValue(i).getElement('fieldData'))
@@ -267,6 +274,7 @@ class BCon(object):
                 break
 
         return data
+       
 
     def ref_hist(self, tickers, flds, start_date,
                  end_date=datetime.date.today().strftime('%Y%m%d'),
@@ -277,7 +285,6 @@ class BCon(object):
         of tickers and fields if multiple fields given, Index otherwise.
         If single field is given DataFrame is ordered same as tickers,
         otherwise MultiIndex is sorted
-
         Parameters
         ----------
         tickers: {list, string}
@@ -357,7 +364,6 @@ class BCon(object):
         """
         Get Open, High, Low, Close, Volume, and numEvents for a ticker.
         Return pandas dataframe
-
         Parameters
         ----------
         ticker: string
@@ -424,3 +430,5 @@ class BCon(object):
         Close the blp session
         """
         self.session.stop()
+        
+        
