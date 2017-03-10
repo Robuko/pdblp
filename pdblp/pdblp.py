@@ -224,8 +224,6 @@ class BCon(object):
             "PortfolioDataRequest" for portfolio information
         """
 
-            def ref(self, tickers, flds, ovrds, rtype):
-
         if type(tickers) is not list:
             tickers = [tickers]
         if type(flds) is not list:
