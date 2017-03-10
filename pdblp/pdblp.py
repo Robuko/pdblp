@@ -209,7 +209,7 @@ class BCon(object):
     def ref(self, tickers, flds=[], ovrds=[], rtype="ReferenceDataRequest"):
         """
         Make a reference data request, get tickers and fields, return long
-        pandas Dataframe with columns [ticker, field, value]
+        pandas Dataframe with columns [fields] and index [tickers]
         Parameters
         ----------
         tickers: {list, string}
@@ -224,10 +224,7 @@ class BCon(object):
             "PortfolioDataRequest" for portfolio information
         """
 
-        return DataFrame(data=self._ref(tickers, flds, ovrds, rtype)) #, columns=["ticker", "field", "value"])
-        
-        
-    def _ref(self, tickers, flds, ovrds, rtype):
+            def ref(self, tickers, flds, ovrds, rtype):
 
         if type(tickers) is not list:
             tickers = [tickers]
@@ -240,40 +237,63 @@ class BCon(object):
         logging.debug("Sending Request:\n %s" % request)
         # Send the request
         self.session.sendRequest(request)
-        data = []
+        df=pd.DataFrame()
         # Process received events
         while(True):
-            # We provide timeout to give the chance for Ctrl+C handling:
             ev = self.session.nextEvent(500)
-            for msg in ev:
-                logging.debug("Message Received:\n %s" % msg)
-                fldData = msg.getElement('securityData')
-                print msg
-                for i in range(fldData.numValues()):
-                    ticker = (fldData.getValue(i).getElement("security").getValue())  # NOQA
-                    reqFldsData = (fldData.getValue(i).getElement('fieldData'))
-                    for j in range(reqFldsData.numElements()):
-                        fld = flds[j]
-                        # this is for dealing with requests which return arrays
-                        # of values for a single field
-                        if reqFldsData.getElement(fld).isArray():
-                            lrng = reqFldsData.getElement(fld).numValues()
-                            for k in range(lrng):
-                                elms = (reqFldsData.getElement(fld).getValue(k).elements())  # NOQA
-                                # if the elements of the array have multiple
-                                # subelements this will just append them all
-                                # into a list
-                                for elm in elms:
-                                    data.append([ticker, fld, elm.getValue()])
-                        else:
-                            val = reqFldsData.getElement(fld).getValue()
-                            data.append([ticker, fld, val])
+            if (ev.eventType() == blpapi.Event.PARTIAL_RESPONSE 
+                or ev.eventType() == blpapi.Event.RESPONSE):            
+                
+                for msg in ev:
+                    # logging.debug("Message Received:\n %s" % msg)
+                    fldData = msg.getElement("securityData")
+                    for i in range(fldData.numValues()):
+                        
+                        securityData = fldData.getValue(i)
+                        ticker =securityData.getElement("security").getValue()          
+                        
+                        
+                        #Each security element has a fieldData element with the fields requested
+                        reqFldsData = securityData.getElement("fieldData") 
+                        
+                        
+                        for element in reqFldsData.elements():
+                            
+                            if not element.isArray():
+                                v = element.getValue()
+                                n = element.name()
+                                
+                                df.ix[ticker, n] = v
+                            
+                            #bulk fields are returned as array
 
+                            elif element.isArray():
+                                data =[]
+                                lrng = element.numValues()
+                                for k in range(lrng):
+                                    elms = (element.getValue(k).elements())  # NOQA
+                                    # if the elements of the array have multiple
+                                    # subelements this will just append them all
+                                    # into a list
+                                    for elm in elms:
+                                        data.append([ticker, element.name(), elm.getValue()]) 
+                                        
+                                    df= DataFrame(data, columns=["ticker", "field", "value"])                        
+                                
+                                '''
+                                for i, row in enumerate(element.values()):
+                                    #print "Row %d: %s" % (i, row)
+                                    if i == 0:
+                                        for headings in element.getValue(i).elements():
+                                            print 'headings '+str(headings.name()),"\t",
+                                    for col in element.getValue(i).elements():                                        
+                                        print 'values'+ str(col.getValue()),"\t",
+                                '''
+
+            
+            # Response completly received, so we could exit
             if ev.eventType() == blpapi.Event.RESPONSE:
-                # Response completely received, so we could exit
-                break
-
-        return data
+                return df
        
 
     def ref_hist(self, tickers, flds, start_date,
